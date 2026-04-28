@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>✦ experimentalCutStar — Lyric Dissector</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121c;
+      --surface2: #1a1a28;
+      --border: #2a2a44;
+      --accent: #7c6bff;
+      --accent2: #ff6b9d;
+      --accent3: #6bffd0;
+      --text: #e8e8f0;
+      --text-dim: #888899;
+      --text-muted: #555566;
+      --verse-bg: rgba(124,107,255,0.07);
+      --chorus-bg: rgba(255,107,157,0.07);
+      --bridge-bg: rgba(107,255,208,0.07);
+      --radius: 12px;
+      --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* ── Layout ── */
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    header .subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .star-icon { font-size: 1.4rem; }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr;
+      overflow: hidden;
+    }
+
+    /* ── Drop Zone ── */
+    #drop-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 60px 20px;
+      text-align: center;
+    }
+
+    .drop-zone {
+      width: 100%;
+      max-width: 520px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 52px 40px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: var(--surface);
+    }
+
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(124,107,255,0.08);
+    }
+
+    .drop-zone .icon { font-size: 3rem; margin-bottom: 12px; }
+    .drop-zone h2 { font-size: 1.2rem; margin-bottom: 8px; }
+    .drop-zone p { color: var(--text-dim); font-size: 0.9rem; }
+
+    .btn-upload {
+      margin-top: 16px;
+      padding: 10px 28px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-upload:hover { opacity: 0.85; }
+
+    /* ── Player/Analysis View ── */
+    #analysis-screen {
+      display: none;
+      grid-template-columns: 320px 1fr;
+      grid-template-rows: 1fr;
+      height: calc(100vh - 61px);
+      overflow: hidden;
+    }
+
+    #analysis-screen.active { display: grid; }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .track-card {
+      padding: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .album-art {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 10px;
+      object-fit: cover;
+      background: var(--surface2);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      overflow: hidden;
+    }
+
+    .album-art img { width: 100%; height: 100%; object-fit: cover; }
+
+    .track-title { font-weight: 700; font-size: 1rem; margin-bottom: 2px; }
+    .track-artist { color: var(--text-dim); font-size: 0.88rem; }
+    .track-meta { color: var(--text-muted); font-size: 0.78rem; margin-top: 6px; }
+
+    .stats-panel {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stats-panel h3 {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat-item {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .stat-value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .freq-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px;
+    }
+
+    .freq-panel h3 {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      padding-bottom: 6px;
+    }
+
+    .freq-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      font-size: 0.83rem;
+    }
+
+    .freq-word { width: 90px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .freq-bar-wrap { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .freq-bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s; }
+    .freq-count { width: 22px; text-align: right; color: var(--text-muted); font-size: 0.75rem; }
+
+    /* Main Content */
+    .content-area {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-wrap: wrap;
+    }
+
+    .toolbar-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-right: 4px;
+    }
+
+    .toggle-btn {
+      padding: 5px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .toggle-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .toggle-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+    .spacer { flex: 1; }
+
+    .btn-action {
+      padding: 5px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-action:hover { border-color: var(--accent2); color: var(--accent2); }
+
+    .btn-new {
+      padding: 5px 14px;
+      border-radius: 6px;
+      border: none;
+      background: var(--surface2);
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-new:hover { background: var(--border); color: var(--text); }
+
+    /* Lyrics Area */
+    .lyrics-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+    }
+
+    .no-lyrics-msg {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 40px;
+    }
+
+    .no-lyrics-msg h3 { margin-bottom: 8px; color: var(--text-dim); }
+
+    .manual-input-area {
+      margin-top: 18px;
+    }
+
+    .manual-input-area textarea {
+      width: 100%;
+      max-width: 560px;
+      height: 200px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.9rem;
+      padding: 14px;
+      resize: vertical;
+      font-family: var(--font-mono);
+    }
+
+    .manual-input-area textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .btn-parse {
+      margin-top: 10px;
+      padding: 8px 22px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Section block */
+    .section-block {
+      margin-bottom: 28px;
+    }
+
+    .section-label {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      padding: 3px 10px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+
+    .section-label.verse  { background: rgba(124,107,255,0.18); color: var(--accent); }
+    .section-label.chorus { background: rgba(255,107,157,0.18); color: var(--accent2); }
+    .section-label.bridge { background: rgba(107,255,208,0.18); color: var(--accent3); }
+    .section-label.outro  { background: rgba(255,200,100,0.18); color: #ffb84d; }
+    .section-label.intro  { background: rgba(100,200,255,0.18); color: #64c8ff; }
+    .section-label.pre-chorus  { background: rgba(180,107,255,0.18); color: #b46bff; }
+    .section-label.hook   { background: rgba(255,180,100,0.18); color: #ffb464; }
+
+    /* Line row */
+    .line-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 3px 0;
+      border-radius: 6px;
+      transition: background 0.1s;
+    }
+
+    .line-row:hover { background: var(--surface2); }
+
+    .line-num {
+      width: 28px;
+      text-align: right;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .line-text { flex: 1; }
+
+    /* Word tokens */
+    .word-token {
+      display: inline;
+      border-radius: 3px;
+      padding: 0 1px;
+      cursor: default;
+      transition: background 0.15s;
+    }
+
+    .word-token:hover {
+      background: rgba(124,107,255,0.25);
+    }
+
+    /* View modes */
+    .line-text.word-view .word-token { display: inline-block; margin: 1px; }
+
+    /* Annotations */
+    .line-annotations {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .syllable-badge {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      padding: 1px 5px;
+      background: var(--surface2);
+      border-radius: 3px;
+    }
+
+    .rhyme-badge {
+      font-size: 0.65rem;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+
+    /* Word tooltip */
+    .word-tooltip {
+      position: fixed;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+      max-width: 200px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    .word-tooltip .tw { font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+    .word-tooltip .ts { color: var(--text-muted); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Empty state */
+    .empty-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* Highlight search */
+    .highlight { background: rgba(255,220,50,0.35); border-radius: 2px; }
+
+    .search-box {
+      padding: 4px 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.82rem;
+      width: 160px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .search-box:focus { border-color: var(--accent); }
+
+    /* Responsive */
+    @media (max-width: 700px) {
+      #analysis-screen { grid-template-columns: 1fr; }
+      .sidebar { max-height: 300px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <span class="star-icon">✦</span>
+    <div>
+      <h1>experimentalCutStar</h1>
+      <div class="subtitle">Lyric Dissector</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Drop screen -->
+    <div id="drop-screen">
+      <div class="drop-zone" id="dropZone">
+        <div class="icon">🎵</div>
+        <h2>Drop an MP3 here</h2>
+        <p>Extracts embedded lyrics from ID3 tags automatically.</p>
+        <button class="btn-upload" onclick="document.getElementById('fileInput').click()">Choose File</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:0.8rem;">Supports MP3 with embedded USLT / SYLT lyrics tags</p>
+      <input type="file" id="fileInput" accept=".mp3,audio/mpeg" style="display:none" />
+    </div>
+
+    <!-- Analysis screen -->
+    <div id="analysis-screen">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="track-card">
+          <div class="album-art" id="albumArtWrap">🎵</div>
+          <div class="track-title" id="trackTitle">Unknown Track</div>
+          <div class="track-artist" id="trackArtist">Unknown Artist</div>
+          <div class="track-meta" id="trackMeta"></div>
+        </div>
+
+        <div class="stats-panel">
+          <h3>📊 Stats</h3>
+          <div class="stat-grid">
+            <div class="stat-item">
+              <div class="stat-value" id="statLines">—</div>
+              <div class="stat-label">Lines</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="statWords">—</div>
+              <div class="stat-label">Words</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="statUnique">—</div>
+              <div class="stat-label">Unique</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="statSections">—</div>
+              <div class="stat-label">Sections</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="freq-panel">
+          <h3>🔤 Top Words</h3>
+          <div id="freqList"></div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="content-area">
+        <div class="toolbar">
+          <span class="toolbar-label">View</span>
+          <button class="toggle-btn active" id="btnLine" onclick="setView('line')">Lines</button>
+          <button class="toggle-btn" id="btnWord" onclick="setView('word')">Words</button>
+          <button class="toggle-btn" id="btnAnnotate" onclick="toggleAnnotations()">Annotations</button>
+          <input type="text" class="search-box" id="searchBox" placeholder="Search lyrics…" oninput="onSearch(this.value)" />
+          <div class="spacer"></div>
+          <button class="btn-action" onclick="copyLyrics()">📋 Copy</button>
+          <button class="btn-new" onclick="resetApp()">↩ New File</button>
+        </div>
+
+        <div class="lyrics-scroll" id="lyricsScroll">
+          <!-- rendered here -->
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Word tooltip -->
+<div class="word-tooltip" id="wordTooltip">
+  <div class="tw" id="ttWord"></div>
+  <div class="ts" id="ttInfo"></div>
+</div>
+
+<script>
+/* ─── State ─── */
+let currentLyrics = '';
+let currentView = 'line';
+let showAnnotations = false;
+let wordFreqMap = {};
+
+/* ─── Rhyme palette ─── */
+const RHYME_COLORS = [
+  '#ff6b9d','#7c6bff','#6bffd0','#ffb84d','#64c8ff',
+  '#ff9f6b','#b46bff','#6bff9f','#ff6b6b','#6bc8ff'
+];
+
+/* ─── Section keywords ─── */
+const SECTION_TAGS = ['[verse','[chorus','[bridge','[outro','[intro','[pre-chorus','[hook','[refrain','[breakdown'];
+
+/* ─── File drop/select ─── */
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+/* ─── Handle file ─── */
+function handleFile(file) {
+  if (!file.name.toLowerCase().endsWith('.mp3') && file.type !== 'audio/mpeg') {
+    alert('Please drop an MP3 file.');
+    return;
+  }
+
+  jsmediatags.read(file, {
+    onSuccess(tag) {
+      const t = tag.tags;
+      displayTrackInfo(t, file.name);
+      const lyrics = extractLyrics(t);
+      if (lyrics) {
+        showAnalysis(lyrics);
+      } else {
+        showNoLyrics();
+      }
+    },
+    onError(err) {
+      console.warn('Tag read error:', err);
+      displayTrackInfo({}, file.name);
+      showNoLyrics();
+    }
+  });
+}
+
+/* ─── Extract lyrics from ID3 tags ─── */
+function extractLyrics(tags) {
+  // Try various lyric tag forms
+  if (tags.lyrics) return tags.lyrics;
+  if (tags.USLT) {
+    const u = tags.USLT;
+    if (typeof u === 'string') return u;
+    if (u.lyrics) return u.lyrics;
+    if (u.text) return u.text;
+  }
+  // Iterate all keys looking for lyric frames
+  for (const key of Object.keys(tags)) {
+    if (key.startsWith('USLT') || key === 'lyrics') {
+      const v = tags[key];
+      if (typeof v === 'string' && v.trim()) return v;
+      if (v && typeof v === 'object') {
+        const txt = v.lyrics || v.text || v.value;
+        if (txt && typeof txt === 'string' && txt.trim()) return txt;
+      }
+    }
+  }
+  return null;
+}
+
+/* ─── Display track metadata ─── */
+function displayTrackInfo(tags, fileName) {
+  const title = tags.title || fileName.replace(/\.mp3$/i, '');
+  const artist = tags.artist || 'Unknown Artist';
+  const album = tags.album || '';
+  const year = tags.year || '';
+
+  document.getElementById('trackTitle').textContent = title;
+  document.getElementById('trackArtist').textContent = artist;
+  document.getElementById('trackMeta').textContent = [album, year].filter(Boolean).join(' · ');
+
+  // Album art
+  const wrap = document.getElementById('albumArtWrap');
+  if (tags.picture) {
+    const pic = tags.picture;
+    const blob = new Blob([new Uint8Array(pic.data)], { type: pic.format });
+    const url = URL.createObjectURL(blob);
+    wrap.innerHTML = `<img src="${url}" alt="album art" />`;
+  } else {
+    wrap.innerHTML = '🎵';
+  }
+}
+
+/* ─── Show analysis view ─── */
+function showAnalysis(lyrics) {
+  currentLyrics = lyrics.trim();
+  document.getElementById('drop-screen').style.display = 'none';
+  document.getElementById('analysis-screen').classList.add('active');
+  renderLyrics();
+  buildStats();
+}
+
+/* ─── Show no-lyrics state ─── */
+function showNoLyrics() {
+  currentLyrics = '';
+  document.getElementById('drop-screen').style.display = 'none';
+  document.getElementById('analysis-screen').classList.add('active');
+
+  const scroll = document.getElementById('lyricsScroll');
+  scroll.innerHTML = `
+    <div class="no-lyrics-msg">
+      <h3>No embedded lyrics found</h3>
+      <p>This MP3 doesn't have lyrics in its ID3 tags.<br>Paste them below to dissect manually.</p>
+      <div class="manual-input-area">
+        <textarea id="manualLyrics" placeholder="Paste lyrics here…\n\n[Verse 1]\nYour lyrics line by line…\n\n[Chorus]\nRepeat…"></textarea><br>
+        <button class="btn-parse" onclick="parseManualLyrics()">✦ Dissect Lyrics</button>
+      </div>
+    </div>
+  `;
+  buildStats();
+}
+
+/* ─── Parse manual lyrics ─── */
+function parseManualLyrics() {
+  const txt = document.getElementById('manualLyrics').value.trim();
+  if (!txt) return;
+  showAnalysis(txt);
+}
+
+/* ─── Parse lyrics into sections ─── */
+function parseSections(lyrics) {
+  const lines = lyrics.split(/\r?\n/);
+  const sections = [];
+  let current = { label: null, type: 'section', lines: [] };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const lower = trimmed.toLowerCase();
+
+    // Detect section header [Verse 1], [Chorus], etc.
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      if (current.lines.length > 0 || current.label) {
+        sections.push(current);
+      }
+      const label = trimmed.slice(1, -1);
+      const type = detectSectionType(lower);
+      current = { label, type, lines: [] };
+    } else {
+      current.lines.push(line);
+    }
+  }
+
+  if (current.lines.length > 0 || current.label) {
+    sections.push(current);
+  }
+
+  return sections;
+}
+
+function detectSectionType(lower) {
+  if (lower.includes('chorus') || lower.includes('refrain')) return 'chorus';
+  if (lower.includes('verse')) return 'verse';
+  if (lower.includes('bridge')) return 'bridge';
+  if (lower.includes('outro')) return 'outro';
+  if (lower.includes('intro')) return 'intro';
+  if (lower.includes('pre')) return 'pre-chorus';
+  if (lower.includes('hook')) return 'hook';
+  return 'section';
+}
+
+/* ─── Syllable count (rough) ─── */
+function countSyllables(word) {
+  word = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (!word) return 0;
+  if (word.length <= 3) return 1;
+  word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
+  word = word.replace(/^y/, '');
+  const m = word.match(/[aeiouy]{1,2}/g);
+  return m ? m.length : 1;
+}
+
+/* ─── Rhyme detection (last syllable matching) ─── */
+function getRhymeKey(line) {
+  const words = line.trim().split(/\s+/);
+  const last = words[words.length - 1]?.toLowerCase().replace(/[^a-z]/g, '') || '';
+  if (!last) return null;
+  // Use last 3 chars as rhyme fingerprint
+  return last.slice(-3);
+}
+
+/* ─── Word frequency ─── */
+function buildWordFreq(lyrics) {
+  const STOP = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','is','it','that','this','be','was','are','as','by','not','from','i','my','me','we','you','your','he','she','they','their','our','its','so','do','did','been','have','had','has','will','would','could','should','all','what','who','when','where','why','how','just','if','then','than','like','more','some','no','go','get','oh','up','out','one','can','now']);
+  const words = lyrics.toLowerCase().match(/\b[a-z']{2,}\b/g) || [];
+  const freq = {};
+  for (const w of words) {
+    if (!STOP.has(w)) freq[w] = (freq[w] || 0) + 1;
+  }
+  wordFreqMap = freq;
+  return freq;
+}
+
+/* ─── Build stats ─── */
+function buildStats() {
+  const lyrics = currentLyrics;
+  if (!lyrics) {
+    ['statLines','statWords','statUnique','statSections'].forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('freqList').innerHTML = '';
+    return;
+  }
+
+  const lines = lyrics.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('['));
+  const words = lyrics.match(/\b\w+\b/g) || [];
+  const unique = new Set(words.map(w => w.toLowerCase()));
+  const sections = parseSections(lyrics).filter(s => s.label).length;
+
+  document.getElementById('statLines').textContent = lines.length;
+  document.getElementById('statWords').textContent = words.length;
+  document.getElementById('statUnique').textContent = unique.size;
+  document.getElementById('statSections').textContent = sections || '—';
+
+  // Freq chart
+  const freq = buildWordFreq(lyrics);
+  const sorted = Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 20);
+  const max = sorted[0]?.[1] || 1;
+  const html = sorted.map(([w, c]) => `
+    <div class="freq-item">
+      <span class="freq-word">${esc(w)}</span>
+      <div class="freq-bar-wrap"><div class="freq-bar" style="width:${(c/max*100).toFixed(1)}%"></div></div>
+      <span class="freq-count">${c}</span>
+    </div>
+  `).join('');
+  document.getElementById('freqList').innerHTML = html;
+}
+
+/* ─── Render lyrics ─── */
+function renderLyrics(searchTerm = '') {
+  const scroll = document.getElementById('lyricsScroll');
+  if (!currentLyrics) { scroll.innerHTML = ''; return; }
+
+  const sections = parseSections(currentLyrics);
+  const rhymeMap = {}; // key → color index
+  let rhymeColorIdx = 0;
+  let globalLineNum = 0;
+
+  // Pre-pass: build rhyme map
+  for (const sec of sections) {
+    for (const line of sec.lines) {
+      if (!line.trim()) continue;
+      const key = getRhymeKey(line);
+      if (key && !rhymeMap[key]) {
+        rhymeMap[key] = RHYME_COLORS[rhymeColorIdx % RHYME_COLORS.length];
+        rhymeColorIdx++;
+      }
+    }
+  }
+
+  // Render rhyme occurrences (only mark if key appears ≥2 times)
+  const rhymeCount = {};
+  for (const sec of sections) {
+    for (const line of sec.lines) {
+      if (!line.trim()) continue;
+      const key = getRhymeKey(line);
+      if (key) rhymeCount[key] = (rhymeCount[key] || 0) + 1;
+    }
+  }
+
+  let html = '';
+
+  for (const sec of sections) {
+    html += `<div class="section-block">`;
+
+    if (sec.label) {
+      html += `<div class="section-label ${sec.type}">${esc(sec.label)}</div>`;
+    }
+
+    for (const line of sec.lines) {
+      if (!line.trim()) {
+        html += `<div style="height:10px"></div>`;
+        continue;
+      }
+      globalLineNum++;
+      const lineNum = globalLineNum;
+      const syllables = line.trim().split(/\s+/).reduce((s, w) => s + countSyllables(w), 0);
+      const rhymeKey = getRhymeKey(line);
+      const rhymeColor = (rhymeKey && rhymeCount[rhymeKey] >= 2) ? rhymeMap[rhymeKey] : null;
+
+      let lineDisplay = '';
+      if (currentView === 'word') {
+        const words = line.split(/(\s+)/);
+        lineDisplay = words.map(chunk => {
+          if (/\s+/.test(chunk)) return chunk;
+          const wordClean = chunk.replace(/[^a-z']/gi, '').toLowerCase();
+          const freq = wordFreqMap[wordClean] || 0;
+          const highlighted = searchTerm && chunk.toLowerCase().includes(searchTerm.toLowerCase())
+            ? `<span class="highlight">${esc(chunk)}</span>` : esc(chunk);
+          return `<span class="word-token" 
+            data-word="${esc(wordClean)}" 
+            data-freq="${freq}"
+            data-syllables="${countSyllables(wordClean)}"
+            onmouseenter="showTooltip(event,this)" 
+            onmouseleave="hideTooltip()">${highlighted}</span>`;
+        }).join('');
+      } else {
+        const escaped = esc(line);
+        lineDisplay = searchTerm
+          ? escaped.replace(new RegExp(esc(searchTerm), 'gi'), m => `<span class="highlight">${m}</span>`)
+          : escaped;
+      }
+
+      const annotHTML = showAnnotations
+        ? `<div class="line-annotations">
+            <span class="syllable-badge" title="syllables">${syllables}syl</span>
+            ${rhymeColor ? `<span class="rhyme-badge" style="background:${rhymeColor}22;color:${rhymeColor}">${rhymeKey}</span>` : ''}
+           </div>`
+        : '';
+
+      html += `
+        <div class="line-row">
+          <span class="line-num">${lineNum}</span>
+          <span class="line-text ${currentView === 'word' ? 'word-view' : ''}">${lineDisplay}</span>
+          ${annotHTML}
+        </div>`;
+    }
+
+    html += `</div>`;
+  }
+
+  scroll.innerHTML = html;
+}
+
+/* ─── View toggles ─── */
+function setView(v) {
+  currentView = v;
+  document.getElementById('btnLine').classList.toggle('active', v === 'line');
+  document.getElementById('btnWord').classList.toggle('active', v === 'word');
+  renderLyrics(document.getElementById('searchBox').value);
+}
+
+function toggleAnnotations() {
+  showAnnotations = !showAnnotations;
+  document.getElementById('btnAnnotate').classList.toggle('active', showAnnotations);
+  renderLyrics(document.getElementById('searchBox').value);
+}
+
+/* ─── Search ─── */
+function onSearch(val) {
+  renderLyrics(val.trim());
+}
+
+/* ─── Copy lyrics ─── */
+function copyLyrics() {
+  if (!currentLyrics) return;
+  navigator.clipboard.writeText(currentLyrics).then(() => {
+    const btn = document.querySelector('.btn-action');
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy', 1800);
+  });
+}
+
+/* ─── Reset ─── */
+function resetApp() {
+  currentLyrics = '';
+  currentView = 'line';
+  showAnnotations = false;
+  document.getElementById('analysis-screen').classList.remove('active');
+  document.getElementById('drop-screen').style.display = '';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('searchBox').value = '';
+}
+
+/* ─── Tooltip ─── */
+function showTooltip(e, el) {
+  const word = el.dataset.word;
+  const freq = el.dataset.freq;
+  const syl = el.dataset.syllables;
+  const tt = document.getElementById('wordTooltip');
+  document.getElementById('ttWord').textContent = word;
+  document.getElementById('ttInfo').textContent = `${syl} syl · appears ${freq}×`;
+  tt.style.display = 'block';
+  tt.style.left = (e.clientX + 14) + 'px';
+  tt.style.top = (e.clientY - 10) + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('wordTooltip').style.display = 'none';
+}
+
+/* ─── Escape HTML ─── */
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
